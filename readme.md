@@ -20,7 +20,15 @@
     docker-compose exec web python manage.py migrate
     docker-compose exec web python manage.py createsuperuser
     ```
-4. **Тесты**
+4. **Добавить тестовые данные (Categories + Products):**
+    ```bash
+   docker-compose exec web python manage.py shell
+   from shop.populate_data import fill_db
+   fill_db()
+   exit()
+   ```
+
+5. **Тесты**
     ```bash
     docker-compose exec web python manage.py test
     ```
@@ -57,9 +65,10 @@
   }
   ```
 
-  **Возможные ошибки**:
-    - `400 Bad Request`: Некорректные данные запроса.
-    - `500 Internal Server Error`: Ошибка сервера при создании заказа.
+**Возможные ошибки**:
+
+- `400 Bad Request`: Некорректные данные запроса.
+- `500 Internal Server Error`: Ошибка сервера при создании заказа.
 
 ### 2. Получение, обновление и удаление заказа по идентификатору
 
