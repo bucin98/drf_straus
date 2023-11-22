@@ -2,7 +2,7 @@ from django.db import transaction, IntegrityError
 from rest_framework import generics, status
 from rest_framework.response import Response
 from .models import Order, Product
-from .serializers import OrderSerializer, OrderListSerializer, OrderCreateSerializer
+from .serializers import OrderSerializer, OrderListSerializer, OrderCreateUpdateSerializer
 
 
 class OrderListCreateView(generics.ListCreateAPIView):
@@ -40,13 +40,25 @@ class OrderListCreateView(generics.ListCreateAPIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        order_serializer = OrderCreateSerializer(order)
+        order_serializer = OrderCreateUpdateSerializer(order)
         return Response(order_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class OrderRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Order.objects.prefetch_related('products__category').all()
-    serializer_class = OrderSerializer
+
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return OrderCreateUpdateSerializer
+        else:
+            return OrderSerializer
+
+    def get_queryset(self):
+        if self.request.method == 'DELETE':
+            return Order.objects.prefetch_related('products').all()
+        elif self.request.method in ['PUT', 'PATCH']:
+            return Order.objects.all()
+        else:
+            return Order.objects.prefetch_related('products__category').all()
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -58,8 +70,9 @@ class OrderRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
 
         existing_products = Product.objects.filter(name__in=products_names)
 
-        if existing_products.count() != len(products_names):
-            return Response({"error": "Some products do not exist."},
+        if len(existing_products) != len(products_names):
+            missing = set(products_names) - {product.name for product in existing_products}
+            return Response({"error": f"Products {missing} do not exist."},
                             status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
@@ -70,4 +83,5 @@ class OrderRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
             Order.products.through.objects.bulk_create(new_order_products)
 
         serializer = self.get_serializer(instance)
-        return Response(serializer.data)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)

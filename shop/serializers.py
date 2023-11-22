@@ -16,7 +16,7 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class OrderCreateSerializer(serializers.ModelSerializer):
+class OrderCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         exclude = ['products']
@@ -24,6 +24,8 @@ class OrderCreateSerializer(serializers.ModelSerializer):
 
 
 class OrderSerializer(serializers.ModelSerializer):
+    products = ProductSerializer(many=True)
+
     class Meta:
         model = Order
         fields = '__all__'
