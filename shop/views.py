@@ -2,7 +2,7 @@ from django.db import transaction, IntegrityError
 from rest_framework import generics, status
 from rest_framework.response import Response
 from .models import Order, Product
-from .serializers import OrderSerializer, OrderListSerializer
+from .serializers import OrderSerializer, OrderListSerializer, OrderCreateSerializer
 
 
 class OrderListCreateView(generics.ListCreateAPIView):
@@ -40,14 +40,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        order_data = {
-            'id': order.id,
-            'customer_name': order.customer_name,
-            'order_date': order.order_date,
-            'products': [{'name': product.name, 'category': {'name': product.category.name}} for product in products]
-        }
-
-        return Response(order_data, status=status.HTTP_201_CREATED)
+        order_serializer = OrderCreateSerializer(order)
+        return Response(order_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class OrderRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):

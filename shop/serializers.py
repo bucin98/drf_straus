@@ -16,9 +16,14 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class OrderSerializer(serializers.ModelSerializer):
-    products = ProductSerializer(many=True)
+class OrderCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        exclude = ['products']
+        read_only_fields = ['total_amount']
 
+
+class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = '__all__'
