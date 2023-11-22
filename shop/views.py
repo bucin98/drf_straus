@@ -20,18 +20,16 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
         try:
             with transaction.atomic():
-                products = Product.objects.prefetch_related('category').filter(name__in=product_names)
+                products = Product.objects.select_related('category').filter(name__in=product_names)
 
-                product_name_set = set(product_names)
-                missing_products = product_name_set - {product.name for product in products}
-
-                if missing_products:
-                    raise Product.DoesNotExist(f"Products with names {missing_products} do not exist.")
+                if len(product_names) != len(products):
+                    missing = set(product_names) - {product.name for product in products}
+                    raise Product.DoesNotExist(f"Products with names {missing} do not exist.")
 
                 order = Order.objects.create(customer_name=customer_name)
-
                 OrderProduct = Order.products.through
                 order_products = [OrderProduct(order=order, product=product) for product in products]
+
                 OrderProduct.objects.bulk_create(order_products)
 
         except Product.DoesNotExist as e:
