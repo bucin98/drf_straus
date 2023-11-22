@@ -1,6 +1,6 @@
 # API для управления заказами в интернет-магазине
 
-# Инструкция по запуску проекта через Docker Compose
+## Инструкция по запуску проекта через Docker Compose
 
 Этот проект использует Docker Compose для упрощения развертывания и запуска. Вот шаги, которые нужно выполнить:
 
@@ -9,10 +9,21 @@
    git clone https://github.com/bucin98/drf_straus
    cd drf_straus
    ```
-   **Запуск:**
+
+2. **Запуск:**
    ```bash
    docker-compose up --build
    ```
+
+3. **Миграции и суперюзер:**
+    ```bash
+    docker-compose exec web python manage.py migrate
+    docker-compose exec web python manage.py createsuperuser
+    ```
+4. **Тесты**
+    ```bash
+    docker-compose exec web python manage.py test
+    ```
 
 ## Описание эндпоинтов
 
@@ -44,7 +55,8 @@
       // Дополнительные продукты
     ]
   }
-   ```
+  ```
+
   **Возможные ошибки**:
     - `400 Bad Request`: Некорректные данные запроса.
     - `500 Internal Server Error`: Ошибка сервера при создании заказа.

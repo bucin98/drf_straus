@@ -99,7 +99,6 @@ class SignalTests(TestCase):
         self.assertEqual(self.product2.sold_items_count, initial_count_product2 + 1)
 
     def test_update_product_sold_items_count_on_order_delete_signal(self):
-        # Trigger the pre_delete signal to update sold_items_count in Product model
         pre_delete.connect(update_product_sold_items_count_on_order_delete, sender=Order)
         self.product1.sold_items_count = 1
         self.product2.sold_items_count = 1
