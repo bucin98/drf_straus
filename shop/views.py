@@ -1,87 +1,88 @@
-from django.db import transaction, IntegrityError
-from rest_framework import generics, status
+from django.db import transaction
+from django.db.models import F
+from rest_framework import viewsets, status
+from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
+
 from .models import Order, Product
-from .serializers import OrderSerializer, OrderListSerializer, OrderCreateUpdateSerializer
+from .serializers import OrderCreateUpdateSerializer, OrderListSerializer
+from .utils import count_total_amount, validate_data, check_products_exist
 
 
-class OrderListCreateView(generics.ListCreateAPIView):
+class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.prefetch_related('products__category').all()
     serializer_class = OrderListSerializer
 
     def create(self, request, *args, **kwargs):
-        customer_name = request.data.get('customer_name', None)
-        product_names = request.data.get('products', [])
+        validated_data = validate_data(request.data, 'create')
+        if isinstance(validated_data, Response):
+            return validated_data
 
-        if customer_name is None or not isinstance(product_names, list) or not product_names:
-            return Response(
-                {"error": "Both customer_name and products are required and should be in the correct format."},
-                status=status.HTTP_400_BAD_REQUEST)
-
+        customer_name, products_ids = validated_data
         try:
+            products = Product.objects.filter(id__in=products_ids)
+            not_exist_response = check_products_exist(products, products_ids)
+            if not_exist_response:
+                return not_exist_response
+
             with transaction.atomic():
-                products = Product.objects.select_related('category').filter(name__in=product_names)
+                total_amount = count_total_amount(products)
+                order = Order.objects.create(customer_name=customer_name, total_amount=total_amount)
 
-                if len(product_names) != len(products):
-                    missing = set(product_names) - {product.name for product in products}
-                    raise Product.DoesNotExist(f"Products with names {missing} do not exist.")
+                order_product_m2m = Order.products.through
+                order_products = [order_product_m2m(order=order, product=product) for product in products]
+                order_product_m2m.objects.bulk_create(order_products)
+                products.update(sold_items_count=F('sold_items_count') + 1)
 
-                order = Order.objects.create(customer_name=customer_name)
-                OrderProduct = Order.products.through
-                order_products = [OrderProduct(order=order, product=product) for product in products]
-
-                OrderProduct.objects.bulk_create(order_products)
-
-        except Product.DoesNotExist as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except IntegrityError as e:
-            return Response({"error": "An error occurred while creating the order. Please try again."},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         order_serializer = OrderCreateUpdateSerializer(order)
         return Response(order_serializer.data, status=status.HTTP_201_CREATED)
 
-
-class OrderRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
-
-    def get_serializer_class(self):
-        if self.request.method in ['PUT', 'PATCH']:
-            return OrderCreateUpdateSerializer
-        else:
-            return OrderSerializer
-
-    def get_queryset(self):
-        if self.request.method == 'DELETE':
-            return Order.objects.prefetch_related('products').all()
-        elif self.request.method in ['PUT', 'PATCH']:
-            return Order.objects.all()
-        else:
-            return Order.objects.prefetch_related('products__category').all()
-
     def update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        products_names = request.data.get('products', None)
+        pk = self.kwargs.get('pk')
+        order = get_object_or_404(Order.objects.prefetch_related('products'), id=pk)
 
-        if not isinstance(products_names, list):
-            return Response({"error": "The request should contain a list of products."},
-                            status=status.HTTP_400_BAD_REQUEST)
+        validated_data = validate_data(request.data, 'update')
+        if isinstance(validated_data, Response):
+            return validated_data
 
-        existing_products = Product.objects.filter(name__in=products_names)
+        customer_name, new_products_ids = validated_data
 
-        if len(existing_products) != len(products_names):
-            missing = set(products_names) - {product.name for product in existing_products}
-            return Response({"error": f"Products {missing} do not exist."},
-                            status=status.HTTP_400_BAD_REQUEST)
+        old_product_ids = Order.products.through.objects.filter(order_id=order.id).values_list('product_id', flat=True)
+
+        products = Product.objects.filter(id__in=new_products_ids)
+        not_exist_response = check_products_exist(products, new_products_ids)
+        if not_exist_response:
+            return not_exist_response
 
         with transaction.atomic():
-            Order.products.through.objects.filter(order_id=instance.id).delete()
-            new_order_products = [Order.products.through(order_id=instance.id, product_id=product.id) for product in
-                                  existing_products]
+            Product.objects.filter(id__in=old_product_ids).update(sold_items_count=F('sold_items_count') - 1)
+            Product.objects.filter(id__in=new_products_ids).update(sold_items_count=F('sold_items_count') + 1)
 
+            Order.products.through.objects.filter(order_id=order.id).delete()
+            new_order_products = [Order.products.through(order_id=order.id, product_id=product.id) for product in
+                                  products]
             Order.products.through.objects.bulk_create(new_order_products)
 
-        serializer = self.get_serializer(instance)
+            order.total_amount = count_total_amount(products)
+            order.save()
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
+            order_serializer = OrderCreateUpdateSerializer(order)
+            return Response(order_serializer.data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        pk = self.kwargs.get('pk')
+        order = get_object_or_404(Order.objects.prefetch_related('products'), id=pk)
+
+        try:
+
+            with transaction.atomic():
+                order.products.update(sold_items_count=F('sold_items_count') - 1)
+                order.delete()
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
