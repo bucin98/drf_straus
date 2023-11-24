@@ -2,33 +2,10 @@ from rest_framework import serializers
 from .models import Category, Product, Order
 
 
-class CategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Category
-        fields = '__all__'
-
-
-class ProductSerializer(serializers.ModelSerializer):
-    category = CategorySerializer()
-
-    class Meta:
-        model = Product
-        fields = '__all__'
-
-
 class OrderCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
-        exclude = ['products']
-        read_only_fields = ['total_amount']
-
-
-class OrderSerializer(serializers.ModelSerializer):
-    products = ProductSerializer(many=True)
-
-    class Meta:
-        model = Order
-        fields = '__all__'
+        fields = ['customer_name', 'total_amount', 'order_date']
         read_only_fields = ['total_amount']
 
 

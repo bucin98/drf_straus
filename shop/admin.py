@@ -11,7 +11,6 @@ class CategoryAdmin(admin.ModelAdmin):
 class ProductAdmin(admin.ModelAdmin):
     list_display = ['name', 'category', 'price', 'sold_items_count', 'created_at']
     list_filter = ['category']
-    readonly_fields = ['sold_items_count']
 
 
 @admin.register(Order)
